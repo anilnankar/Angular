@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Bootstrap Tree View</title>
+    <link href="./bower_components/bootstrap/dist/css/bootstrap.css" rel="stylesheet">
+  </head>
+  <body>
+  <div class="container">
+      <div class="row">
+
+        <div class="col-md-6">
+          <h3>Create / Load Tree</h3>
+          <input type="button" id="createObject" value="Create New Object"/>
+          <input type="button" id="loadObject" value="Load Object"/><br/>
+          <textarea id="objectText" value="" rows="5" cols="50" readonly></textarea><br/>
+          <input type="button" id="printTree" value="Print"/>
+          <input type="button" id="printLevelTree" value="Print By Level"/>
+          <input type="button" id="saveObject" value="Save"/>
+        </div>
+
+        <div class="col-md-6">
+          <h3>Add Node</h3>
+          <input type="text" id="parentValue" placeholder="Enter parent"/>
+          <input type="text" id="childValue" placeholder="Enter child"/>
+          <select id="type" name="type">
+		<option value="century">Century</option>
+		<option value="category">Category</option>
+		<option value="family">Family</option>
+		<option value="character">Character</option>
+		<option value="festival">Festival</option>
+	  </select>	
+	  </br>
+          <textarea id="description" value="" rows="5" cols="50"></textarea><br/>
+          <input type="file" id="file"/><br/>
+   <span id="uploaded_image"></span><br/>
+          <input type="button" id="addParent" value="Add Parent"/>
+          <input type="button" id="addChild" value="Add Child"/></br>
+        </div>
+
+        <div class="col-md-6">
+          <h3>Remove Node</h3>
+          <input type="text" id="childRemove" placeholder="Enter child to remove"/>
+          <input type="button" id="removeObject" value="Remove"/>
+        </div>
+
+
+
+      </div>
+    </div>
+    <script src="./bower_components/jquery/dist/jquery.js"></script>
+  	<script type="text/javascript">
+
+	$(function() {
+            var tree;
+            function uploadFile() {
+		  var name = document.getElementById("file").files[0].name;
+		  var form_data = new FormData();
+		  var ext = name.split('.').pop().toLowerCase();
+		  if(jQuery.inArray(ext, ['gif','png','jpg','jpeg']) == -1) 
+		  {
+		   	alert("Invalid Image File");
+		  }
+		  var oFReader = new FileReader();
+		  oFReader.readAsDataURL(document.getElementById("file").files[0]);
+		  var f = document.getElementById("file").files[0];
+		  var fsize = f.size||f.fileSize;
+		  if(fsize > 2000000)
+		  {
+		   	alert("Image File Size is very big");
+		  }
+		  else
+		  {
+			form_data.append("file", document.getElementById('file').files[0]);
+			$.ajax({
+				url:"upload.php",
+				method:"POST",
+				data: form_data,
+				contentType: false,
+				cache: false,
+				processData: false,
+				beforeSend:function(){
+					$('#uploaded_image').html("<label class='text-success'>Image Uploading...</label>");
+				},   
+				success:function(data)
+				{
+					$('#uploaded_image').html(data);
+				}
+			});
+		  }
+            }
+
+
+            function Node(data, parent, inst) {
+                var parent = parent ? inst.findBFS(parent) : null;
+                console.log(parent);
+                tag = parent ? parent.nodes.length : 0;
+                this.text = data;
+                this.href = "#"+data.trim();
+                this.tags = [tag];
+                this.century = "";
+                this.personal = "";
+                this.description = $('#description').val();
+                this.type = $('#type').val();
+                this.photo = ""; //uploadFile();
+                this.nodes = [];
+            }
+
+            function Tree(load=false) {
+		var data1 = null;
+		if(load) {
+		        $.ajax({
+		            type: "GET",
+		            url: "resources.json",
+		            async:false,
+		            success: function(data)
+		            {
+		                data1 =JSON.parse(JSON.stringify(data.root));
+		            }
+		        });
+		}
+		this.root = data1;
+                console.log(this);
+            }
+
+            Tree.prototype.add = function(data, toNodeData) {
+                var node = new Node(data, toNodeData, this);
+                var parent = toNodeData ? this.findBFS(toNodeData) : null;
+                if(parent) {
+                    parent.nodes.push(node);
+                } else {
+                    if(!this.root) {
+                        this.root = node;
+                    } else {
+                        return 'Root node is already assigned';
+                    }
+                }
+//                console.log(tree);
+
+            };
+            Tree.prototype.remove = function(data) {
+                if(this.root.text === data) {
+                    this.root = null;
+                }
+
+                var queue = [this.root];
+                while(queue.length) {
+                    var node = queue.shift();
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        if(node.nodes[i].text === data) {
+                            node.nodes.splice(i, 1);
+                        } else {
+                            queue.push(node.nodes[i]);
+                        }
+                    }
+                }
+            };
+            Tree.prototype.contains = function(data) {
+                return this.findBFS(data) ? true : false;
+            };
+            Tree.prototype.findBFS = function(data) {
+                var queue = [this.root];
+                while(queue.length) {
+                    var node = queue.shift();
+                    if(node.text === data) {
+                        return node;
+                    }
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        queue.push(node.nodes[i]);
+                    }
+                }
+                return null;
+            };
+            Tree.prototype._preOrder = function(node, fn) {
+                if(node) {
+                    if(fn) {
+                        fn(node);
+                    }
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        this._preOrder(node.nodes[i], fn);
+                    }
+                }
+            };
+            Tree.prototype._postOrder = function(node, fn) {
+                if(node) {
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        this._postOrder(node.nodes[i], fn);
+                    }
+                    if(fn) {
+                        fn(node);
+                    }
+                }
+            };
+            Tree.prototype.traverseDFS = function(fn, method) {
+                var current = this.root;
+                if(method) {
+                    this['_' + method](current, fn);
+                } else {
+                    this._preOrder(current, fn);
+                }
+            };
+            Tree.prototype.traverseBFS = function(fn) {
+                var queue = [this.root];
+                while(queue.length) {
+                    var node = queue.shift();
+                    if(fn) {
+                        fn(node);
+                    }
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        queue.push(node.nodes[i]);
+                    }
+                }
+            };
+            Tree.prototype.print = function() {
+                $('#objectText').val('');
+                if(!this.root) {
+                    return console.log('No root node found');
+                }
+                var str = JSON.stringify(tree);
+                $('#objectText').val(str);
+            };
+            Tree.prototype.printByLevel = function() {
+                $('#objectText').val('');
+                if(!this.root) {
+                    return console.log('No root node found');
+                }
+                var newline = new Node('\n');
+                var queue = [this.root, newline];
+                var string = '';
+                while(queue.length) {
+                    var node = queue.shift();
+                    string += node.text.toString() + (node.text !== '\n' ? ' ' : '');
+                    if(node === newline && queue.length) {
+                        queue.push(newline);
+                    }
+                    for(var i = 0; i < node.nodes.length; i++) {
+                        queue.push(node.nodes[i]);
+                    }
+                }
+                console.log(string);
+                $('#objectText').val(string.trim());
+            };
+
+            var createObject = function() {
+                tree = new Tree();
+            };
+
+            var loadObject = function() {
+                tree = new Tree(true);
+            };
+
+            var addParent = function() {
+                var parent = $('#parentValue').val();
+                res = tree.add(parent);
+            };
+            var addChild = function() {
+                var parent = $('#parentValue').val();
+                var child = $('#childValue').val();
+                tree.add(child, parent);
+            };
+            var printTree = function() {
+                tree.print();
+            };
+            var printLevelTree = function() {
+                tree.printByLevel();
+            };
+            var removeObject = function() {
+                var child = $('#childRemove').val();
+                tree.remove(child);
+            };
+            var saveObject = function() {
+                var params = JSON.stringify(tree);
+                $.ajax({
+                    type: 'POST',
+                    data: params,
+                    async:false,
+                    url: 'save_to_json.php',
+                    success: function(data){
+                        console.log("successd");
+                    },
+                    error: function(){
+                        console.log("failed");
+                    }
+                });
+            };
+
+            $('#createObject').click(createObject);
+            $('#addParent').click(addParent);
+            $('#addChild').click(addChild);
+            $('#printTree').click(printTree);
+            $('#printLevelTree').click(printLevelTree);
+            $('#removeObject').click(removeObject);
+            $('#saveObject').click(saveObject);
+            $('#loadObject').click(loadObject);
+
+        });
+    </script>
+  </body>
+</html>
